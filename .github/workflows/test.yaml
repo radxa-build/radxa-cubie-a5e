@@ -3,15 +3,17 @@ env:
 jobs:
   build:
     needs: "prepare_release"
+    permissions:
+      contents: "write"
     runs-on: "ubuntu-latest"
     steps:
     - name: "Checkout"
-      uses: "actions/checkout@v6"
+      uses: "actions/checkout@v7"
     - name: "Build image"
       uses: "RadxaOS-SDK/rsdk/.github/actions/build@main"
       with:
         edition: "${{ matrix.edition }}"
-        github-token: "${{ secrets.GITHUB_TOKEN }}"
+        github-token: "${{ github.token }}"
         product: "${{ matrix.product }}"
         release-id: "${{ needs.prepare_release.outputs.release_id }}"
         suite: "${{ matrix.suite }}"
@@ -29,19 +31,25 @@ jobs:
       editions: "${{ steps.query.outputs.editions }}"
       release_id: "${{ steps.release.outputs.id }}"
       suites: "${{ steps.query.outputs.suites }}"
+    permissions:
+      contents: "write"
     runs-on: "ubuntu-latest"
     steps:
     - name: "Checkout"
-      uses: "actions/checkout@v6"
+      uses: "actions/checkout@v7"
       with:
         fetch-depth: 0
         fetch-tags: true
     - name: "Check for existing releases"
       run: |
         TAG="rsdk-t${{ github.run_number }}"
-        if git show-ref --tags --verify --quiet "refs/tags/${TAG}"; then
+        if gh release view "${TAG}" >/dev/null 2>&1; then
             echo "Release ${TAG} exists."
             exit 1
+        fi
+        if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} exists without a release. Deleting it so the build can recreate it."
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}"
         fi
     - name: "Generate changelog"
       uses: "radxa-repo/rbuild-changelog@main"
@@ -65,7 +73,7 @@ jobs:
         prerelease: true
         tag_name: "rsdk-t${{ github.run_number }}"
         target_commitish: "main"
-        token: "${{ secrets.GITHUB_TOKEN }}"
+        token: "${{ github.token }}"
 name: "Build image for test channel"
 "on":
   workflow_dispatch: {}
